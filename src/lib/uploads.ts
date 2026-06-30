@@ -2,13 +2,16 @@ import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
 
-const UPLOAD_ROOT = path.join(process.cwd(), "uploads");
+function uploadRoot(): string {
+  if (process.env.VERCEL) return path.join("/tmp", "mebel-uploads");
+  return path.join(process.cwd(), "uploads");
+}
 
 export async function saveUpload(
   file: File,
   subdir: string,
 ): Promise<{ filename: string; filepath: string }> {
-  const dir = path.join(UPLOAD_ROOT, subdir);
+  const dir = path.join(uploadRoot(), subdir);
   await mkdir(dir, { recursive: true });
 
   const ext = path.extname(file.name) || ".bin";
@@ -24,7 +27,7 @@ export async function saveUpload(
 }
 
 export function uploadAbsolutePath(relativePath: string): string {
-  return path.join(UPLOAD_ROOT, relativePath);
+  return path.join(uploadRoot(), relativePath);
 }
 
 export async function deleteUpload(relativePath: string): Promise<void> {

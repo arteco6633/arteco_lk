@@ -34,6 +34,9 @@ npm run dev
 
 ## Деплой на Vercel
 
+**Обязательно:** Settings → Build and Deployment → **Framework Preset = Next.js** (не «Other»).  
+Root Directory — пусто (корень репозитория).
+
 В **Environment Variables** добавьте все переменные из `.env.example`:
 
 | Переменная | Откуда |
