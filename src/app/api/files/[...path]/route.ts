@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import path from "path";
 import { StorageProvider } from "@prisma/client";
 import { readFileBuffer } from "@/lib/storage";
-import { requireSessionFromDb } from "@/lib/session";
+import { requireSession } from "@/lib/session";
 
 function contentTypeForPath(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -17,7 +17,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
-  await requireSessionFromDb();
+  await requireSession();
   const segments = (await params).path;
   const relativePath = segments.join("/");
 
@@ -38,6 +38,7 @@ export async function GET(
       headers: {
         "Content-Type": type,
         "Content-Disposition": "inline",
+        "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
       },
     });
   } catch {

@@ -1,11 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  parseHardwareExcel,
-  parsePartsExcel,
-  parseSpecificationExcel,
-} from "@/lib/excel";
+import { uploadFileDirect } from "@/lib/direct-upload-client";
 
 type ImportDetail = {
   row: number;
@@ -62,44 +58,20 @@ export function ExcelImport({
     setDetails([]);
     setParseErrors([]);
 
-    const buffer = await file.arrayBuffer();
-    let payload: Record<string, unknown>;
+    const formData = new FormData();
+    formData.append("orderId", orderId);
+    formData.append("type", type);
 
-    if (type === "specification") {
-      const parsed = parseSpecificationExcel(buffer);
-      payload = {
-        orderId,
-        type,
-        parts: parsed.parts,
-        hardware: parsed.hardware,
-        skipped: parsed.skipped,
-        errors: parsed.errors,
-      };
-    } else if (type === "hardware") {
-      const parsed = parseHardwareExcel(buffer);
-      payload = {
-        orderId,
-        type,
-        rows: parsed.rows,
-        skipped: parsed.skipped,
-        errors: parsed.errors,
-      };
+    const direct = await uploadFileDirect(file, `imports/${orderId}`);
+    if (direct) {
+      formData.append("filepath", direct.filepath);
+      formData.append("filename", direct.filename);
+      formData.append("storageProvider", direct.storageProvider);
     } else {
-      const parsed = parsePartsExcel(buffer);
-      payload = {
-        orderId,
-        type,
-        rows: parsed.rows,
-        skipped: parsed.skipped,
-        errors: parsed.errors,
-      };
+      formData.append("file", file);
     }
 
-    const res = await fetch("/api/import/excel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const res = await fetch("/api/import/excel", { method: "POST", body: formData });
 
     let data: Record<string, unknown> = {};
     try {

@@ -17,11 +17,38 @@ export default async function PackPage() {
         },
       },
     },
-    include: {
-      order: true,
-      parts: { orderBy: { name: "asc" } },
-      hardware: { orderBy: { name: "asc" } },
-      documents: true,
+    select: {
+      id: true,
+      orderId: true,
+      number: true,
+      name: true,
+      order: { select: { number: true } },
+      parts: {
+        where: { status: { in: ["QC_PASSED", "PACKED"] } },
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          dimensions: true,
+          quantity: true,
+          status: true,
+        },
+      },
+      hardware: {
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, quantity: true, unit: true, packed: true },
+      },
+      documents: {
+        where: { type: { in: ["ASSEMBLY_DRAWING", "LABEL"] } },
+        select: {
+          id: true,
+          type: true,
+          filename: true,
+          filepath: true,
+          storageProvider: true,
+        },
+      },
     },
     orderBy: [{ order: { number: "asc" } }, { number: "asc" }],
   });

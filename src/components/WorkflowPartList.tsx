@@ -39,6 +39,7 @@ type Props = {
   groupBySection?: boolean;
   groupByModule?: boolean;
   onPartUpdated?: (partId: string) => void;
+  renderPartFooter?: (part: WorkflowPartItem) => React.ReactNode;
 };
 
 function formatSize(part: WorkflowPartItem): string | null {
@@ -59,6 +60,7 @@ export function WorkflowPartList({
   groupBySection = false,
   groupByModule = false,
   onPartUpdated,
+  renderPartFooter,
 }: Props) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [comment, setComment] = useState<Record<string, string>>({});
@@ -177,6 +179,7 @@ export function WorkflowPartList({
             )}
           </div>
         </div>
+        {renderPartFooter?.(part)}
       </div>
     );
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireSessionFromDb } from "@/lib/session";
+import { requireSession } from "@/lib/session";
 import { canAccess } from "@/lib/constants";
 import { buildAssemblyHints, entriesFromSystemParts } from "@/lib/assembly-guide";
 import { fileApiUrl } from "@/lib/file-url";
@@ -10,8 +10,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireSessionFromDb();
-    if (!canAccess(user.role, ["ADMIN", "SORTER", "MANAGER", "CONTRACTOR"])) {
+    const user = await requireSession();
+    if (!canAccess(user.role, ["ADMIN", "SORTER", "MANAGER", "CONTRACTOR", "DRILLER"])) {
       return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
     }
 
@@ -19,14 +19,38 @@ export async function GET(
 
     const product = await prisma.product.findUnique({
       where: { id: productId },
-      include: {
-        order: true,
+      select: {
+        number: true,
+        name: true,
+        order: { select: { number: true } },
         documents: {
           where: { type: { in: ["ASSEMBLY_DRAWING", "PART_DETAIL"] } },
           orderBy: { uploadedAt: "desc" },
+          take: 2,
+          select: {
+            id: true,
+            filename: true,
+            filepath: true,
+            storageProvider: true,
+            type: true,
+          },
         },
         parts: {
           orderBy: [{ sectionOrder: "asc" }, { specNumber: "asc" }, { name: "asc" }],
+          select: {
+            id: true,
+            specNumber: true,
+            name: true,
+            code: true,
+            module: true,
+            length: true,
+            width: true,
+            dimensions: true,
+            quantity: true,
+            material: true,
+            sectionOrder: true,
+            status: true,
+          },
         },
       },
     });
@@ -40,21 +64,7 @@ export async function GET(
       product.documents.find((d) => d.type === "PART_DETAIL") ??
       null;
 
-    const allParts = product.parts.map((p) => ({
-      id: p.id,
-      specNumber: p.specNumber,
-      name: p.name,
-      code: p.code,
-      module: p.module,
-      length: p.length,
-      width: p.width,
-      dimensions: p.dimensions,
-      quantity: p.quantity,
-      material: p.material,
-      sectionOrder: p.sectionOrder,
-      status: p.status,
-    }));
-
+    const allParts = product.parts;
     const systemEntries = entriesFromSystemParts(allParts);
     const sortParts = allParts.filter((p) => p.status === "RECEIVED");
 

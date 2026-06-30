@@ -1,17 +1,23 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireSessionFromDb } from "@/lib/session";
+import { requireSession } from "@/lib/session";
 import { canAccess } from "@/lib/constants";
 import { matchDetailPage } from "@/lib/drilling-types";
-import { parseDetailPdfPage } from "@/lib/pdf-drilling";
+import {
+  createDrillOcrWorker,
+  openDetailPdf,
+  parseDetailPdfPageFromDoc,
+} from "@/lib/pdf-drilling";
 import { readFileBuffer } from "@/lib/storage";
+
+export const maxDuration = 60;
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireSessionFromDb();
+    const user = await requireSession();
     if (!canAccess(user.role, ["ADMIN", "DRILLER", "MANAGER"])) {
       return NextResponse.json({ error: "Нет доступа" }, { status: 403 });
     }
@@ -20,7 +26,6 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const pageParam = searchParams.get("page");
     const dimensions = searchParams.get("dimensions");
-    const allPages = searchParams.get("all") === "1";
 
     const product = await prisma.product.findUnique({
       where: { id: productId },
@@ -29,6 +34,7 @@ export async function GET(
           where: { type: "PART_DETAIL" },
           orderBy: { uploadedAt: "desc" },
           take: 1,
+          select: { id: true, filename: true, filepath: true, storageProvider: true },
         },
       },
     });
@@ -43,37 +49,57 @@ export async function GET(
     }
 
     const buffer = await readFileBuffer(doc.filepath, doc.storageProvider);
+    const pdf = await openDetailPdf(buffer);
+    const worker = await createDrillOcrWorker();
+    const documentMeta = { id: doc.id, filename: doc.filename };
 
-    if (pageParam) {
-      const pageNumber = Number(pageParam);
-      const drilling = await parseDetailPdfPage(buffer, pageNumber);
-      return NextResponse.json({ drilling, document: { id: doc.id, filename: doc.filename } });
-    }
-
-    const pages = [];
-    for (let p = 1; p <= 15; p++) {
-      try {
-        pages.push(await parseDetailPdfPage(buffer, p));
-      } catch {
-        break;
+    try {
+      if (pageParam) {
+        const pageNumber = Number(pageParam);
+        const drilling = await parseDetailPdfPageFromDoc(pdf, pageNumber, worker);
+        return NextResponse.json({ drilling, document: documentMeta });
       }
-    }
 
-    if (allPages) {
+      const maxPages = Math.min(pdf.numPages, 15);
+
+      if (dimensions) {
+        let first: Awaited<ReturnType<typeof parseDetailPdfPageFromDoc>> | null = null;
+        for (let p = 1; p <= maxPages; p++) {
+          const page = await parseDetailPdfPageFromDoc(pdf, p, worker);
+          if (!first) first = page;
+          if (matchDetailPage([page], dimensions)) {
+            return NextResponse.json({
+              drilling: page,
+              matchedPage: p,
+              document: documentMeta,
+            });
+          }
+        }
+        return NextResponse.json({
+          drilling: first,
+          matchedPage: first?.pageNumber ?? 1,
+          document: documentMeta,
+        });
+      }
+
+      const pages = [];
+      for (let p = 1; p <= maxPages; p++) {
+        try {
+          pages.push(await parseDetailPdfPageFromDoc(pdf, p, worker));
+        } catch {
+          break;
+        }
+      }
+
       return NextResponse.json({
+        drilling: pages[0] ?? null,
         pages,
         pageCount: pages.length,
-        document: { id: doc.id, filename: doc.filename },
+        document: documentMeta,
       });
+    } finally {
+      await worker.terminate();
     }
-
-    const drilling = matchDetailPage(pages, dimensions) ?? pages[0];
-
-    return NextResponse.json({
-      drilling,
-      matchedPage: drilling?.pageNumber,
-      document: { id: doc.id, filename: doc.filename },
-    });
   } catch (error) {
     console.error("Drilling parse error:", error);
     return NextResponse.json(

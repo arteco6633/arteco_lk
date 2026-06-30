@@ -1,9 +1,9 @@
 import type { HardwareItem, Part, Product } from "@prisma/client";
 import { normalizeProductNumber } from "./excel";
 
-type ProductWithRelations = Product & {
-  parts: Part[];
-  hardware: HardwareItem[];
+type ProductWithRelations = {
+  parts: Array<Pick<Part, "status">>;
+  hardware: Array<Pick<HardwareItem, "packed">>;
 };
 
 export function findProductByNumber(

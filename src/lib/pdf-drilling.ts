@@ -1,6 +1,6 @@
 import { createCanvas, type Canvas } from "@napi-rs/canvas";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import Tesseract from "tesseract.js";
+import { getDocument, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
+import Tesseract, { type Worker } from "tesseract.js";
 import type {
   DetailPageDrilling,
   DetailPdfDrillingResult,
@@ -17,6 +17,25 @@ function toUint8Array(buffer: ArrayBuffer | Uint8Array | Buffer): Uint8Array {
   if (Buffer.isBuffer(buffer)) return Uint8Array.from(buffer);
   if (buffer instanceof Uint8Array) return Uint8Array.from(buffer);
   return new Uint8Array(buffer.slice(0));
+}
+
+async function renderPageToCanvas(
+  pdf: PDFDocumentProxy,
+  pageNumber: number,
+): Promise<Canvas> {
+  if (pageNumber > pdf.numPages) {
+    throw new Error(`В PDF только ${pdf.numPages} стр.`);
+  }
+  const page = await pdf.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: RENDER_SCALE });
+  const canvas = createCanvas(viewport.width, viewport.height);
+  const ctx = canvas.getContext("2d");
+  await page.render({
+    canvasContext: ctx as unknown as CanvasRenderingContext2D,
+    viewport,
+    canvas: canvas as unknown as HTMLCanvasElement,
+  }).promise;
+  return canvas;
 }
 
 async function renderPage(canvas: Canvas, pageNumber: number, buffer: Uint8Array) {
@@ -45,11 +64,36 @@ function cropRegion(source: Canvas, region: typeof TABLE_CROP): Buffer {
   return canvas.toBuffer("image/png");
 }
 
-async function ocrPng(png: Buffer): Promise<string> {
+async function ocrPng(png: Buffer, worker?: Worker): Promise<string> {
+  if (worker) {
+    const result = await worker.recognize(png);
+    return result.data.text;
+  }
   const result = await Tesseract.recognize(png, "rus+eng", {
     tessedit_pageseg_mode: "6",
   } as Record<string, string>);
   return result.data.text;
+}
+
+export async function openDetailPdf(
+  buffer: ArrayBuffer | Uint8Array | Buffer,
+): Promise<PDFDocumentProxy> {
+  const data = toUint8Array(buffer);
+  return getDocument({ data, useSystemFonts: true }).promise;
+}
+
+export async function createDrillOcrWorker(): Promise<Worker> {
+  return Tesseract.createWorker("rus+eng");
+}
+
+export async function parseDetailPdfPageFromDoc(
+  pdf: PDFDocumentProxy,
+  pageNumber: number,
+  worker?: Worker,
+): Promise<DetailPageDrilling> {
+  const canvas = await renderPageToCanvas(pdf, pageNumber);
+  const tableOcr = await ocrPng(cropRegion(canvas, TABLE_CROP), worker);
+  return parseDrillingFromOcr(tableOcr, pageNumber);
 }
 
 function parseHoleHeader(text: string): {
@@ -266,38 +310,34 @@ export async function parseDetailPdfPage(
   buffer: ArrayBuffer | Uint8Array | Buffer,
   pageNumber: number,
 ): Promise<DetailPageDrilling> {
-  const data = toUint8Array(buffer);
-  const pdf = await getDocument({ data, useSystemFonts: true }).promise;
-  const page = await pdf.getPage(pageNumber);
-  const viewport = page.getViewport({ scale: RENDER_SCALE });
-  const canvas = createCanvas(viewport.width, viewport.height);
-  const ctx = canvas.getContext("2d");
-  await page.render({
-    canvasContext: ctx as unknown as CanvasRenderingContext2D,
-    viewport,
-    canvas: canvas as unknown as HTMLCanvasElement,
-  }).promise;
-
-  const tableOcr = await ocrPng(cropRegion(canvas, TABLE_CROP));
-
-  return parseDrillingFromOcr(tableOcr, pageNumber);
+  const pdf = await openDetailPdf(buffer);
+  const worker = await createDrillOcrWorker();
+  try {
+    return await parseDetailPdfPageFromDoc(pdf, pageNumber, worker);
+  } finally {
+    await worker.terminate();
+  }
 }
 
 export async function parseDetailPdf(
   buffer: ArrayBuffer | Uint8Array | Buffer,
   maxPages = 5,
 ): Promise<DetailPdfDrillingResult> {
-  const data = toUint8Array(buffer);
-  const pdf = await getDocument({ data, useSystemFonts: true }).promise;
+  const pdf = await openDetailPdf(buffer);
+  const worker = await createDrillOcrWorker();
   const pages: DetailPageDrilling[] = [];
   const errors: string[] = [];
 
-  for (let p = 1; p <= Math.min(pdf.numPages, maxPages); p++) {
-    try {
-      pages.push(await parseDetailPdfPage(data, p));
-    } catch (e) {
-      errors.push(`Стр. ${p}: ${e instanceof Error ? e.message : "ошибка"}`);
+  try {
+    for (let p = 1; p <= Math.min(pdf.numPages, maxPages); p++) {
+      try {
+        pages.push(await parseDetailPdfPageFromDoc(pdf, p, worker));
+      } catch (e) {
+        errors.push(`Стр. ${p}: ${e instanceof Error ? e.message : "ошибка"}`);
+      }
     }
+  } finally {
+    await worker.terminate();
   }
 
   return { pageCount: pdf.numPages, pages, errors };

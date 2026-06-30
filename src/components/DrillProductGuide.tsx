@@ -2,12 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AssemblyPdfViewer } from "@/components/AssemblyPdfViewer";
+import { PartDrillingLoader } from "@/components/PartDrillingLoader";
+import { PartSearchField } from "@/components/PartSearchField";
+import { WorkflowPartList, type WorkflowPartItem } from "@/components/WorkflowPartList";
 import { formatPartSortHint } from "@/lib/assembly-guide";
 import { formatModuleLabel, resolvePartModule } from "@/lib/module";
 import { matchesPositionQuery } from "@/lib/part-search";
-import { WorkflowPartList, type WorkflowPartItem } from "./WorkflowPartList";
-import { PartSearchField } from "./PartSearchField";
 import type { PartStatus } from "@prisma/client";
+
+type GuidePart = WorkflowPartItem & {
+  material: string | null;
+  sectionOrder: number | null;
+};
 
 type GuideDocument = {
   id: string;
@@ -16,12 +22,7 @@ type GuideDocument = {
   type: string;
 };
 
-type GuidePart = WorkflowPartItem & {
-  material: string | null;
-  sectionOrder: number | null;
-};
-
-export function SortProductGuide({
+export function DrillProductGuide({
   productId,
   productNumber,
   productName,
@@ -77,8 +78,8 @@ export function SortProductGuide({
       setActivePartId(filtered[0].id);
       return;
     }
-    const match = parts.find((p) => matchesPositionQuery(p, q));
-    setActivePartId(match?.id ?? null);
+    const found = parts.find((p) => matchesPositionQuery(p, q));
+    setActivePartId(found?.id ?? null);
   }, [query, filtered, parts]);
 
   const activePart = activePartId ? parts.find((p) => p.id === activePartId) : null;
@@ -100,8 +101,8 @@ export function SortProductGuide({
 
   return (
     <div className="w-full max-w-none space-y-4 sm:space-y-5 lg:space-y-6">
-      <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-800 text-white p-4 sm:p-5 lg:p-6">
-        <p className="text-xs font-bold uppercase tracking-wide opacity-90">Сортировка для изделия</p>
+      <div className="rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 text-white p-4 sm:p-5 lg:p-6">
+        <p className="text-xs font-bold uppercase tracking-wide opacity-90">Присадка для изделия</p>
         <p className="text-xl sm:text-2xl lg:text-3xl font-bold mt-1 leading-tight">
           {productNumber} — {productName}
         </p>
@@ -117,30 +118,46 @@ export function SortProductGuide({
       {!loadingDrawing && !document && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-medium text-black">
           {drawingError ??
-            "Сборочный чертёж не загружен. Сортируйте по списку деталей ниже — менеджер может прикрепить PDF на странице заказа."}
+            "Сборочный чертёж не загружен. Работайте по списку деталей — менеджер может прикрепить PDF на странице заказа."}
         </div>
       )}
 
       <PartSearchField
         value={query}
         onChange={setQuery}
-        hint="Сканируйте Поз. — система покажет модуль и подсветит деталь в списке ниже."
+        hint="Сканируйте Поз. — система покажет модуль и схему присадки для детали."
         placeholder="Поз. — код детали"
       />
 
       {activePart && activeModule && (
-        <div className="rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-white p-4 sm:p-5 shadow-lg">
-          <p className="text-xs font-bold uppercase tracking-wide opacity-90">Модуль на чертеже</p>
-          <p className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-1 leading-tight">
-            {formatModuleLabel(activeModule)}
-          </p>
-          <p className="text-sm sm:text-base font-medium mt-2 opacity-95">{formatPartSortHint(activePart)}</p>
+        <div className="rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-white p-4 sm:p-5 shadow-lg space-y-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide opacity-90">Модуль на чертеже</p>
+            <p className="text-2xl sm:text-3xl lg:text-4xl font-bold mt-1 leading-tight">
+              {formatModuleLabel(activeModule)}
+            </p>
+            <p className="text-sm sm:text-base font-medium mt-2 opacity-95">
+              {formatPartSortHint(activePart)}
+            </p>
+          </div>
+          <PartDrillingLoader
+            productId={productId}
+            dimensions={activePart.dimensions}
+            partName={activePart.name}
+            autoLoad
+          />
         </div>
       )}
 
       {activePart && !activeModule && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-black">
-          {formatPartSortHint(activePart)}
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-black space-y-3">
+          <p>{formatPartSortHint(activePart)}</p>
+          <PartDrillingLoader
+            productId={productId}
+            dimensions={activePart.dimensions}
+            partName={activePart.name}
+            autoLoad
+          />
         </div>
       )}
 
@@ -152,12 +169,21 @@ export function SortProductGuide({
 
       <WorkflowPartList
         parts={workflowParts}
-        stage="sort"
-        actionLabel="✓ Отсортировано"
-        nextStatus={"SORTED" as PartStatus}
+        stage="drill"
+        actionLabel="📷 Фото + выполнено"
+        nextStatus={"DRILLED" as PartStatus}
+        requirePhoto
         hideContext
         groupByModule={!query.trim()}
         onPartUpdated={handlePartUpdated}
+        renderPartFooter={(part) => (
+          <PartDrillingLoader
+            productId={productId}
+            dimensions={part.dimensions}
+            partName={part.name}
+            autoLoad={part.id === activePartId}
+          />
+        )}
       />
     </div>
   );

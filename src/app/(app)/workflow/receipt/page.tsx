@@ -9,10 +9,18 @@ export default async function ReceiptPage() {
   if (!session || !canAccess(session.role, ["ADMIN", "CONTRACTOR", "MANAGER"])) redirect("/login");
 
   const orders = await prisma.order.findMany({
+    where: {
+      products: { some: { parts: { some: { status: "CREATED" } } } },
+    },
     orderBy: { createdAt: "desc" },
-    include: {
+    select: {
+      id: true,
+      number: true,
+      title: true,
       products: {
-        include: {
+        where: { parts: { some: { status: "CREATED" } } },
+        select: {
+          id: true,
           parts: {
             where: { status: "CREATED" },
             select: { id: true },
@@ -22,13 +30,11 @@ export default async function ReceiptPage() {
     },
   });
 
-  const activeOrders = orders
-    .map((order) => {
-      const pendingParts = order.products.reduce((sum, p) => sum + p.parts.length, 0);
-      const pendingProducts = order.products.filter((p) => p.parts.length > 0).length;
-      return { ...order, pendingParts, pendingProducts };
-    })
-    .filter((order) => order.pendingParts > 0);
+  const activeOrders = orders.map((order) => {
+    const pendingParts = order.products.reduce((sum, p) => sum + p.parts.length, 0);
+    const pendingProducts = order.products.length;
+    return { ...order, pendingParts, pendingProducts };
+  });
 
   return (
     <div>

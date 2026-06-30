@@ -5,7 +5,7 @@ const projectRoot = path.resolve(__dirname);
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: projectRoot,
-  serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas", "tesseract.js"],
+  serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas", "tesseract.js", "xlsx"],
   turbopack: {
     root: projectRoot,
   },

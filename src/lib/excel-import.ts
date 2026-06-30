@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import type {
   ImportedHardwareRow,
   ImportedPartRow,
@@ -10,6 +9,8 @@ import { extractModuleFromName } from "@/lib/module";
 import { findProductForImport } from "@/lib/products";
 import { assignSectionOrder } from "@/lib/specification-groups";
 import { syncOrderStatus } from "@/lib/orders";
+import { readFileBuffer } from "@/lib/storage";
+import { resolveUploadFromForm } from "@/lib/resolve-upload";
 
 export type ImportDetail = {
   row: number;
@@ -45,6 +46,24 @@ export async function importParts(
   let created = 0;
   let notFound = 0;
   const rowsWithOrder = assignSectionOrder(rows);
+  const toCreate: Array<{
+    productId: string;
+    specNumber?: number;
+    name: string;
+    code?: string;
+    module: string | null;
+    length?: string;
+    width?: string;
+    dimensions?: string;
+    quantity: number;
+    material?: string;
+    sectionOrder?: number;
+    edging?: string;
+    groove?: string;
+    rectangular?: string;
+    row: ImportedPartRow;
+    product: (typeof orderProducts)[number];
+  }> = [];
 
   for (const row of rowsWithOrder) {
     const product = findProductForImport(orderProducts, row);
@@ -62,33 +81,41 @@ export async function importParts(
       });
       continue;
     }
-    await prisma.part.create({
-      data: {
-        productId: product.id,
-        specNumber: row.specNumber,
-        name: row.name,
-        code: row.code,
-        module: extractModuleFromName(row.name),
-        length: row.length,
-        width: row.width,
-        dimensions: row.dimensions,
-        quantity: row.quantity,
-        material: row.material,
-        sectionOrder: row.sectionOrder,
-        edging: row.edging,
-        groove: row.groove,
-        rectangular: row.rectangular,
-      },
-    });
-    created++;
-    details.push({
-      row: row.sourceRow,
+    toCreate.push({
+      productId: product.id,
+      specNumber: row.specNumber,
       name: row.name,
-      productNumber: row.productNumber,
-      status: "created",
-      target: `№${product.number} «${product.name}»`,
-      kind: "part",
+      code: row.code,
+      module: extractModuleFromName(row.name),
+      length: row.length,
+      width: row.width,
+      dimensions: row.dimensions,
+      quantity: row.quantity,
+      material: row.material,
+      sectionOrder: row.sectionOrder,
+      edging: row.edging,
+      groove: row.groove,
+      rectangular: row.rectangular,
+      row,
+      product,
     });
+  }
+
+  if (toCreate.length > 0) {
+    await prisma.part.createMany({
+      data: toCreate.map(({ row: _row, product: _product, ...data }) => data),
+    });
+    created = toCreate.length;
+    for (const item of toCreate) {
+      details.push({
+        row: item.row.sourceRow,
+        name: item.row.name,
+        productNumber: item.row.productNumber,
+        status: "created",
+        target: `№${item.product.number} «${item.product.name}»`,
+        kind: "part",
+      });
+    }
   }
 
   return { created, notFound, details };
@@ -102,6 +129,16 @@ export async function importHardware(
   const details: ImportDetail[] = [];
   let created = 0;
   let notFound = 0;
+  const toCreate: Array<{
+    productId: string;
+    specNumber?: number;
+    code?: string;
+    name: string;
+    quantity: number;
+    unit?: string;
+    row: ImportedHardwareRow;
+    product: (typeof orderProducts)[number];
+  }> = [];
 
   for (const row of rows) {
     const product = findProductForImport(orderProducts, row);
@@ -119,25 +156,33 @@ export async function importHardware(
       });
       continue;
     }
-    await prisma.hardwareItem.create({
-      data: {
-        productId: product.id,
-        specNumber: row.specNumber,
-        code: row.code,
-        name: row.name,
-        quantity: row.quantity,
-        unit: row.unit,
-      },
-    });
-    created++;
-    details.push({
-      row: row.sourceRow,
+    toCreate.push({
+      productId: product.id,
+      specNumber: row.specNumber,
+      code: row.code,
       name: row.name,
-      productNumber: row.productNumber,
-      status: "created",
-      target: `№${product.number} «${product.name}»`,
-      kind: "hardware",
+      quantity: row.quantity,
+      unit: row.unit,
+      row,
+      product,
     });
+  }
+
+  if (toCreate.length > 0) {
+    await prisma.hardwareItem.createMany({
+      data: toCreate.map(({ row: _row, product: _product, ...data }) => data),
+    });
+    created = toCreate.length;
+    for (const item of toCreate) {
+      details.push({
+        row: item.row.sourceRow,
+        name: item.row.name,
+        productNumber: item.row.productNumber,
+        status: "created",
+        target: `№${item.product.number} «${item.product.name}»`,
+        kind: "hardware",
+      });
+    }
   }
 
   return { created, notFound, details };
@@ -232,14 +277,24 @@ export async function parseExcelFromFormData(formData: FormData) {
   } = await import("@/lib/excel");
 
   const orderId = String(formData.get("orderId") ?? "");
-  const file = formData.get("file");
   const importType = String(formData.get("type") ?? "specification");
 
-  if (!orderId || !(file instanceof File)) {
-    return { error: "Нужны orderId и файл Excel", status: 400 as const };
+  if (!orderId) {
+    return { error: "Нужен orderId", status: 400 as const };
   }
 
-  const buffer = await file.arrayBuffer();
+  let buffer: ArrayBuffer;
+  const saved = await resolveUploadFromForm(formData, `imports/${orderId}`);
+  const file = formData.get("file");
+
+  if (saved) {
+    const data = await readFileBuffer(saved.filepath, saved.storageProvider);
+    buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+  } else if (file instanceof File && file.size > 0) {
+    buffer = await file.arrayBuffer();
+  } else {
+    return { error: "Нужен файл Excel", status: 400 as const };
+  }
 
   if (importType === "specification") {
     const parsed: SpecificationParseResult = parseSpecificationExcel(buffer);

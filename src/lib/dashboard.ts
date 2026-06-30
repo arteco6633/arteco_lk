@@ -41,17 +41,20 @@ export type DashboardData = {
 };
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const [parts, orders, recentHistory] = await Promise.all([
-    prisma.part.findMany({
-      select: { status: true, productId: true },
+  const [statusGroups, orders, recentHistory, totalParts] = await Promise.all([
+    prisma.part.groupBy({
+      by: ["status"],
+      _count: { _all: true },
     }),
     prisma.order.findMany({
       orderBy: { updatedAt: "desc" },
-      include: {
+      select: {
+        id: true,
+        number: true,
+        title: true,
         products: {
-          include: {
+          select: {
             parts: { select: { status: true } },
-            _count: { select: { parts: true } },
           },
         },
       },
@@ -67,6 +70,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         },
       },
     }),
+    prisma.part.count(),
   ]);
 
   const totals = Object.fromEntries(ALL_STATUSES.map((s) => [s, 0])) as Record<
@@ -74,8 +78,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     number
   >;
 
-  for (const part of parts) {
-    totals[part.status]++;
+  for (const row of statusGroups) {
+    totals[row.status] = row._count._all;
   }
 
   type OrderRow = DashboardData["activeOrders"][number] & { hasActive: boolean };
@@ -83,8 +87,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   for (const order of orders) {
     const allParts = order.products.flatMap((p) => p.parts);
-    const totalParts = allParts.length;
-    if (totalParts === 0) continue;
+    const partCount = allParts.length;
+    if (partCount === 0) continue;
 
     const byStatus = Object.fromEntries(ALL_STATUSES.map((s) => [s, 0])) as Record<
       PartStatus,
@@ -94,7 +98,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       byStatus[part.status]++;
     }
 
-    const progressPercent = Math.round((byStatus.PACKED / totalParts) * 100);
+    const progressPercent = Math.round((byStatus.PACKED / partCount) * 100);
     const hasActive = allParts.some((p) => p.status !== "PACKED");
 
     orderRows.push({
@@ -102,7 +106,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       number: order.number,
       title: order.title,
       productCount: order.products.length,
-      totalParts,
+      totalParts: partCount,
       byStatus,
       progressPercent,
       hasActive,
@@ -136,7 +140,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   return {
     updatedAt: new Date().toISOString(),
     totals,
-    totalParts: parts.length,
+    totalParts,
     totalOrders: orders.length,
     ordersWithoutParts,
     activeOrders,
