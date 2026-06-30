@@ -1,4 +1,5 @@
 import { StatusBadge } from "@/components/StatusBadge";
+import { EdgingDisplay } from "@/components/EdgingDisplay";
 import type { PartStatus } from "@prisma/client";
 import {
   groupPartsByMaterialSection,
@@ -32,7 +33,9 @@ function PartsTable({ parts }: { parts: SpecificationPart[] }) {
               <td className="py-2 pr-4 font-medium text-black">{part.length ?? "—"}</td>
               <td className="py-2 pr-4 font-medium text-black">{part.width ?? "—"}</td>
               <td className="py-2 pr-4 font-medium text-black">{part.quantity}</td>
-              <td className="py-2 pr-4 font-medium text-black">{part.edging ?? "—"}</td>
+              <td className="py-2 pr-4 font-medium text-black align-top">
+                <EdgingDisplay edging={part.edging} />
+              </td>
               <td className="py-2 pr-4 font-medium text-black">{part.groove ?? "—"}</td>
               <td className="py-2 pr-4 font-medium text-black">{part.rectangular ?? "—"}</td>
               <td className="py-2">
