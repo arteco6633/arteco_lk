@@ -12,6 +12,7 @@ export function AppNav({ links }: { links: NavLink[] }) {
   function isActive(href: string) {
     if (href === "/admin") return pathname === "/admin";
     if (href === "/orders") return pathname.startsWith("/orders");
+    if (href === "/catalog") return pathname.startsWith("/catalog");
     if (href === "/workflow/procurement") return pathname.startsWith("/workflow/procurement");
     return pathname.startsWith(href);
   }

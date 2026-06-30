@@ -19,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ...(session.role === "ADMIN" || session.role === "MANAGER"
       ? [
           { href: "/orders", label: "Заказы" },
+          { href: "/catalog", label: "Справочник" },
           { href: "/workflow/procurement", label: "Закупка" },
         ]
       : []),

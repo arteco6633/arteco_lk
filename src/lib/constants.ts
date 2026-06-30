@@ -44,6 +44,23 @@ export const DOCUMENT_TYPE_LABELS = {
   LABEL: "Бирка",
 } as const;
 
+export const CATALOG_TYPE_LABELS = {
+  BOARD: "Листовые материалы",
+  HARDWARE: "Фурнитура",
+  EDGE: "Кромка",
+  SERVICE: "Услуги",
+  OTHER: "Прочее",
+} as const;
+
+export const CATALOG_UNIT_LABELS = {
+  SHEET: "за лист",
+  SQM: "за м²",
+  PIECE: "за шт",
+  METER: "за п.м",
+  KG: "за кг",
+  OTHER: "",
+} as const;
+
 export const WORKFLOW_LINKS = [
   { href: "/workflow/receipt", label: "Приёмка", roles: ["ADMIN", "CONTRACTOR", "MANAGER"] as Role[] },
   { href: "/workflow/sort", label: "Сортировка", roles: ["ADMIN", "SORTER", "MANAGER"] as Role[] },
