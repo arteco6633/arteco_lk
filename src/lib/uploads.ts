@@ -2,7 +2,7 @@ import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
 
-const UPLOAD_ROOT = path.join(/* turbopackIgnore: true */ process.cwd(), "uploads");
+const UPLOAD_ROOT = path.join(process.cwd(), "uploads");
 
 export async function saveUpload(
   file: File,
