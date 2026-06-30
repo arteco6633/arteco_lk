@@ -80,7 +80,7 @@ export function groupPartsByMaterialSection<T extends SpecificationPart>(
     }));
 }
 
-export function sortHardwareItems(items: SpecificationHardware[]): SpecificationHardware[] {
+export function sortHardwareItems<T extends SpecificationHardware>(items: T[]): T[] {
   return [...items].sort((a, b) => {
     const aNum = a.specNumber ?? Number.MAX_SAFE_INTEGER;
     const bNum = b.specNumber ?? Number.MAX_SAFE_INTEGER;
