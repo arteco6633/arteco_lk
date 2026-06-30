@@ -1,5 +1,6 @@
 import { PartStatus } from "@prisma/client";
 import { prisma } from "./db";
+import { syncOrderStatus } from "./orders";
 import type { SessionUser } from "./session";
 
 type TransitionOptions = {
@@ -54,6 +55,8 @@ export async function transitionPartStatus({
       comment,
     },
   });
+
+  await syncOrderStatus(part.product.orderId);
 
   return updated;
 }

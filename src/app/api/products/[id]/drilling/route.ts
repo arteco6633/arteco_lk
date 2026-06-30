@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { readFile } from "fs/promises";
-import path from "path";
 import { prisma } from "@/lib/db";
 import { requireSessionFromDb } from "@/lib/session";
 import { canAccess } from "@/lib/constants";
 import { matchDetailPage } from "@/lib/drilling-types";
 import { parseDetailPdfPage } from "@/lib/pdf-drilling";
+import { readFileBuffer } from "@/lib/storage";
 
 export async function GET(
   request: Request,
@@ -43,8 +42,7 @@ export async function GET(
       return NextResponse.json({ error: "Деталировка не загружена" }, { status: 404 });
     }
 
-    const fullPath = path.join(process.cwd(), "uploads", doc.filepath);
-    const buffer = await readFile(fullPath);
+    const buffer = await readFileBuffer(doc.filepath, doc.storageProvider);
 
     if (pageParam) {
       const pageNumber = Number(pageParam);

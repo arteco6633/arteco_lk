@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
-import { readFile } from "fs/promises";
 import path from "path";
-import { uploadAbsolutePath } from "@/lib/uploads";
+import { StorageProvider } from "@prisma/client";
+import { readFileBuffer } from "@/lib/storage";
 import { requireSessionFromDb } from "@/lib/session";
 
+function contentTypeForPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".pdf") return "application/pdf";
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".webp") return "image/webp";
+  return "application/octet-stream";
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   await requireSessionFromDb();
@@ -16,23 +25,19 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  try {
-    const fullPath = uploadAbsolutePath(relativePath);
-    const data = await readFile(fullPath);
-    const ext = path.extname(fullPath).toLowerCase();
-    const type =
-      ext === ".pdf"
-        ? "application/pdf"
-        : ext === ".png"
-          ? "image/png"
-          : ext === ".jpg" || ext === ".jpeg"
-            ? "image/jpeg"
-            : "application/octet-stream";
+  const { searchParams } = new URL(request.url);
+  const providerRaw = searchParams.get("storage");
+  const storageProvider: StorageProvider =
+    providerRaw === "SUPABASE" ? "SUPABASE" : "LOCAL";
 
-    return new NextResponse(data, {
+  try {
+    const data = await readFileBuffer(relativePath, storageProvider);
+    const type = contentTypeForPath(relativePath);
+
+    return new NextResponse(new Uint8Array(data), {
       headers: {
         "Content-Type": type,
-        "Content-Disposition": ext === ".pdf" ? "inline" : "inline",
+        "Content-Disposition": "inline",
       },
     });
   } catch {

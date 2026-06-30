@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { canAccess, STATUS_LABELS } from "@/lib/constants";
+import { canAccess, ORDER_STATUS_LABELS, STATUS_LABELS } from "@/lib/constants";
 import { DocumentUpload } from "@/components/DocumentUpload";
 import { DocumentList } from "@/components/DocumentList";
 import { ProductSpecification } from "@/components/ProductSpecification";
@@ -22,6 +22,7 @@ export default async function OrderDetailPage({
   const order = await prisma.order.findUnique({
     where: { id },
     include: {
+      documents: { orderBy: { uploadedAt: "desc" } },
       products: {
         include: {
           parts: { orderBy: [{ sectionOrder: "asc" }, { specNumber: "asc" }, { name: "asc" }] },
@@ -51,6 +52,9 @@ export default async function OrderDetailPage({
       <div className="mt-3 mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-black">Заказ {order.number}</h1>
+          <p className="text-sm font-medium text-indigo-700 mt-1">
+            {ORDER_STATUS_LABELS[order.status] ?? order.status}
+          </p>
           {order.title && <p className="font-medium text-black">{order.title}</p>}
           {order.notes && <p className="text-sm font-medium text-black mt-1">{order.notes}</p>}
         </div>
@@ -73,6 +77,19 @@ export default async function OrderDetailPage({
           orderId={order.id}
           products={order.products.map((p) => ({ number: p.number, name: p.name }))}
         />
+      </div>
+
+      <div className="mb-6 rounded-2xl bg-white border border-slate-200 p-5">
+        <h2 className="text-lg font-bold text-black mb-2">Документы заказа</h2>
+        <p className="text-sm font-medium text-black mb-3">
+          Договор, счёт, общие чертежи — привязаны к заказу целиком
+        </p>
+        <DocumentUpload scope="order" orderId={order.id} />
+        {order.documents.length > 0 && (
+          <div className="mt-4">
+            <DocumentList scope="order" parentId={order.id} documents={order.documents} />
+          </div>
+        )}
       </div>
 
       <div className="space-y-6">
@@ -105,11 +122,15 @@ export default async function OrderDetailPage({
                 productNumber={product.number}
                 productName={product.name}
               />
-              <DocumentUpload productId={product.id} />
+              <DocumentUpload scope="product" productId={product.id} />
             </div>
 
             {product.documents.length > 0 && (
-              <DocumentList productId={product.id} documents={product.documents} />
+              <DocumentList
+                scope="product"
+                parentId={product.id}
+                documents={product.documents}
+              />
             )}
 
             <ProductSpecification parts={product.parts} />

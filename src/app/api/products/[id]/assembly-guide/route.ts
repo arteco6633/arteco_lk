@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireSessionFromDb } from "@/lib/session";
 import { canAccess } from "@/lib/constants";
 import { buildAssemblyHints, entriesFromSystemParts } from "@/lib/assembly-guide";
+import { fileApiUrl } from "@/lib/file-url";
 
 export async function GET(
   _request: Request,
@@ -77,7 +78,7 @@ export async function GET(
         filename: assemblyDoc.filename,
         filepath: assemblyDoc.filepath,
         type: assemblyDoc.type,
-        fileUrl: `/api/files/${assemblyDoc.filepath}`,
+        fileUrl: fileApiUrl(assemblyDoc.filepath, assemblyDoc.storageProvider),
       },
       product: { number: product.number, name: product.name, orderNumber: product.order.number },
       hints: hintsToObject(hints),

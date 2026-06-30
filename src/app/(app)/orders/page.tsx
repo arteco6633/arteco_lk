@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { canAccess } from "@/lib/constants";
+import { canAccess, ORDER_STATUS_LABELS } from "@/lib/constants";
 
 export default async function OrdersPage() {
   const session = await getSession();
@@ -49,6 +49,9 @@ export default async function OrdersPage() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
                   <h2 className="font-bold text-lg text-black">Заказ {order.number}</h2>
+                  <p className="text-sm font-medium text-indigo-700">
+                    {ORDER_STATUS_LABELS[order.status] ?? order.status}
+                  </p>
                   {order.title && <p className="font-medium text-black">{order.title}</p>}
                 </div>
                 <p className="text-sm font-medium text-black">

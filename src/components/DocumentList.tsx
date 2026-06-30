@@ -2,26 +2,31 @@
 
 import { useState } from "react";
 import { DOCUMENT_TYPE_LABELS } from "@/lib/constants";
-import type { DocumentType } from "@prisma/client";
+import { fileApiUrl } from "@/lib/file-url";
+import type { DocumentType, StorageProvider } from "@prisma/client";
 
 type DocItem = {
   id: string;
   type: DocumentType;
   filename: string;
   filepath: string;
+  storageProvider?: StorageProvider;
 };
 
-export function DocumentList({
-  productId,
-  documents,
-}: {
-  productId: string;
-  documents: DocItem[];
-}) {
+type Props =
+  | { scope: "product"; parentId: string; documents: DocItem[] }
+  | { scope: "order"; parentId: string; documents: DocItem[] };
+
+export function DocumentList({ scope, parentId, documents }: Props) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   if (documents.length === 0) return null;
+
+  const deleteUrl =
+    scope === "order"
+      ? `/api/orders/${parentId}/documents`
+      : `/api/products/${parentId}/documents`;
 
   async function handleDelete(doc: DocItem) {
     const label =
@@ -32,7 +37,7 @@ export function DocumentList({
     setLoadingId(doc.id);
     setError("");
 
-    const res = await fetch(`/api/products/${productId}/documents/${doc.id}`, {
+    const res = await fetch(`${deleteUrl}/${doc.id}`, {
       method: "DELETE",
     });
     const data = await res.json().catch(() => ({}));
@@ -55,7 +60,7 @@ export function DocumentList({
             className="flex items-center gap-1 rounded-lg bg-slate-100 pl-3 pr-1 py-1"
           >
             <a
-              href={`/api/files/${doc.filepath}`}
+              href={fileApiUrl(doc.filepath, doc.storageProvider ?? "LOCAL")}
               target="_blank"
               rel="noreferrer"
               className="text-sm font-medium text-black hover:underline"

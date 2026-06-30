@@ -6,10 +6,19 @@ import type { DocumentType } from "@prisma/client";
 
 const DOC_TYPES: DocumentType[] = ["ASSEMBLY_DRAWING", "PART_DETAIL", "LABEL"];
 
-export function DocumentUpload({ productId }: { productId: string }) {
+type Props =
+  | { scope: "product"; productId: string }
+  | { scope: "order"; orderId: string };
+
+export function DocumentUpload(props: Props) {
   const [type, setType] = useState<DocumentType>("ASSEMBLY_DRAWING");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  const uploadUrl =
+    props.scope === "order"
+      ? `/api/orders/${props.orderId}/documents`
+      : `/api/products/${props.productId}/documents`;
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -21,7 +30,7 @@ export function DocumentUpload({ productId }: { productId: string }) {
     formData.append("type", type);
     formData.append("file", file);
 
-    const res = await fetch(`/api/products/${productId}/documents`, {
+    const res = await fetch(uploadUrl, {
       method: "POST",
       body: formData,
     });

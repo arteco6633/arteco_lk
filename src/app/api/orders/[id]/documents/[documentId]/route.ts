@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireSessionFromDb } from "@/lib/session";
-import { deleteFile } from "@/lib/uploads";
+import { deleteFile } from "@/lib/storage";
 
 export async function DELETE(
   _request: Request,
@@ -13,10 +13,10 @@ export async function DELETE(
       return NextResponse.json({ error: "Доступ только менеджеру" }, { status: 403 });
     }
 
-    const { id: productId, documentId } = await params;
+    const { id: orderId, documentId } = await params;
 
     const document = await prisma.document.findFirst({
-      where: { id: documentId, productId },
+      where: { id: documentId, orderId },
     });
 
     if (!document) {
@@ -31,7 +31,7 @@ export async function DELETE(
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Нужно войти в систему" }, { status: 401 });
     }
-    console.error("Document delete error:", error);
+    console.error("Order document delete error:", error);
     return NextResponse.json({ error: "Не удалось удалить файл" }, { status: 500 });
   }
 }

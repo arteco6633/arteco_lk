@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireSessionFromDb } from "@/lib/session";
 import { canAccess } from "@/lib/constants";
+import { syncOrderStatus } from "@/lib/orders";
 
 export async function POST(request: Request) {
   const user = await requireSessionFromDb();
@@ -36,7 +37,10 @@ export async function POST(request: Request) {
   const item = await prisma.hardwareItem.update({
     where: { id: hardwareId },
     data,
+    include: { product: { select: { orderId: true } } },
   });
+
+  await syncOrderStatus(item.product.orderId);
 
   return NextResponse.json(item);
 }
@@ -55,6 +59,11 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Не указаны позиции" }, { status: 400 });
   }
 
+  const items = await prisma.hardwareItem.findMany({
+    where: { id: { in: ids } },
+    select: { product: { select: { orderId: true } } },
+  });
+
   const result = await prisma.hardwareItem.updateMany({
     where: { id: { in: ids } },
     data: {
@@ -62,6 +71,9 @@ export async function PATCH(request: Request) {
       purchasedAt: purchased ? new Date() : null,
     },
   });
+
+  const orderIds = [...new Set(items.map((i) => i.product.orderId))];
+  await Promise.all(orderIds.map((orderId) => syncOrderStatus(orderId)));
 
   return NextResponse.json({ updated: result.count });
 }

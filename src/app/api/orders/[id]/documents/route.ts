@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { DocumentType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireSessionFromDb } from "@/lib/session";
-import { saveFile } from "@/lib/uploads";
+import { saveFile } from "@/lib/storage";
 
 const ALLOWED_TYPES = new Set<string>(Object.values(DocumentType));
 
@@ -12,7 +12,7 @@ export async function POST(
 ) {
   try {
     await requireSessionFromDb();
-    const { id: productId } = await params;
+    const { id: orderId } = await params;
     const formData = await request.formData();
     const typeRaw = String(formData.get("type") ?? "").trim();
     const file = formData.get("file");
@@ -30,15 +30,15 @@ export async function POST(
       return NextResponse.json({ error: "Файл не выбран" }, { status: 400 });
     }
 
-    const product = await prisma.product.findUnique({ where: { id: productId } });
-    if (!product) {
-      return NextResponse.json({ error: "Изделие не найдено" }, { status: 404 });
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) {
+      return NextResponse.json({ error: "Заказ не найден" }, { status: 404 });
     }
 
-    const saved = await saveFile(file, `documents/${productId}`);
+    const saved = await saveFile(file, `orders/${orderId}`);
     const document = await prisma.document.create({
       data: {
-        productId,
+        orderId,
         type,
         filename: saved.filename,
         filepath: saved.filepath,
@@ -50,17 +50,14 @@ export async function POST(
   } catch (error) {
     if (error instanceof Prisma.PrismaClientValidationError) {
       return NextResponse.json(
-        {
-          error:
-            "Ошибка типа документа. Перезапустите сервер: npm run dev (после обновления системы).",
-        },
+        { error: "Ошибка типа документа. Перезапустите сервер." },
         { status: 500 },
       );
     }
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "Нужно войти в систему" }, { status: 401 });
     }
-    console.error("Document upload error:", error);
+    console.error("Order document upload error:", error);
     return NextResponse.json({ error: "Не удалось загрузить файл" }, { status: 500 });
   }
 }

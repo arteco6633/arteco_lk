@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireSessionFromDb } from "@/lib/session";
-import { deleteUploads } from "@/lib/uploads";
+import { deleteFiles } from "@/lib/uploads";
 
 export async function GET(
   _request: Request,
@@ -43,9 +43,10 @@ export async function DELETE(
     const order = await prisma.order.findUnique({
       where: { id },
       include: {
+        documents: { select: { filepath: true, storageProvider: true } },
         products: {
           include: {
-            documents: { select: { filepath: true } },
+            documents: { select: { filepath: true, storageProvider: true } },
             parts: { select: { drillPhotoPath: true } },
           },
         },
@@ -56,15 +57,20 @@ export async function DELETE(
       return NextResponse.json({ error: "Заказ не найден" }, { status: 404 });
     }
 
-    const files: string[] = [];
+    const files: { filepath: string; storageProvider?: "LOCAL" | "SUPABASE" }[] = [];
+    for (const doc of order.documents) {
+      files.push({ filepath: doc.filepath, storageProvider: doc.storageProvider });
+    }
     for (const product of order.products) {
-      for (const doc of product.documents) files.push(doc.filepath);
+      for (const doc of product.documents) {
+        files.push({ filepath: doc.filepath, storageProvider: doc.storageProvider });
+      }
       for (const part of product.parts) {
-        if (part.drillPhotoPath) files.push(part.drillPhotoPath);
+        if (part.drillPhotoPath) files.push({ filepath: part.drillPhotoPath });
       }
     }
 
-    await deleteUploads(files);
+    await deleteFiles(files);
     await prisma.order.delete({ where: { id } });
 
     return NextResponse.json({ ok: true });

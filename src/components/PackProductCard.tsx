@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
-import type { DocumentType, PartStatus } from "@prisma/client";
+import { fileApiUrl } from "@/lib/file-url";
+import type { DocumentType, PartStatus, StorageProvider } from "@prisma/client";
 
 type HardwareItem = {
   id: string;
@@ -26,6 +27,7 @@ type Document = {
   type: DocumentType;
   filename: string;
   filepath: string;
+  storageProvider?: StorageProvider;
 };
 
 type ProductPack = {
@@ -121,7 +123,7 @@ export function PackProductCard({ product }: { product: ProductPack }) {
             {assemblyDrawings.map((doc) => (
               <PrintLink
                 key={doc.id}
-                href={`/api/files/${doc.filepath}`}
+                href={fileApiUrl(doc.filepath, doc.storageProvider ?? "LOCAL")}
                 label="Сборочный чертёж — распечатать и приложить"
                 filename={doc.filename}
               />
@@ -129,7 +131,7 @@ export function PackProductCard({ product }: { product: ProductPack }) {
             {labels.map((doc) => (
               <PrintLink
                 key={doc.id}
-                href={`/api/files/${doc.filepath}`}
+                href={fileApiUrl(doc.filepath, doc.storageProvider ?? "LOCAL")}
                 label="Бирка — распечатать и приклеить на упаковку"
                 filename={doc.filename}
               />

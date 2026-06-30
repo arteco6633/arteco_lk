@@ -1,4 +1,4 @@
-import { PartStatus, Role } from "@prisma/client";
+import { OrderStatus, PartStatus, Role } from "@prisma/client";
 
 export const ROLE_LABELS: Record<Role, string> = {
   ADMIN: "Администратор",
@@ -28,6 +28,14 @@ export const STATUS_COLORS: Record<PartStatus, string> = {
   QC_PASSED: "bg-green-100 text-green-800",
   QC_FAILED: "bg-red-100 text-red-800",
   PACKED: "bg-emerald-100 text-emerald-800",
+};
+
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  NEW: "Новый",
+  PROCUREMENT: "Закупка",
+  PRODUCTION: "В производстве",
+  COMPLETED: "Завершён",
+  CANCELLED: "Отменён",
 };
 
 export const DOCUMENT_TYPE_LABELS = {

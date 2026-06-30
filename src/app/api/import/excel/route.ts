@@ -11,6 +11,7 @@ import {
 import { extractModuleFromName } from "@/lib/module";
 import { findProductForImport } from "@/lib/products";
 import { assignSectionOrder } from "@/lib/specification-groups";
+import { syncOrderStatus } from "@/lib/orders";
 
 type ImportDetail = {
   row: number;
@@ -167,6 +168,8 @@ export async function POST(request: Request) {
       const partsResult = await importParts(order.products, parts, errors);
       const hwResult = await importHardware(order.products, hardware, errors);
 
+      await syncOrderStatus(orderId);
+
       return NextResponse.json({
         ok: true,
         created: partsResult.created + hwResult.created,
@@ -184,6 +187,7 @@ export async function POST(request: Request) {
     if (importType === "hardware") {
       const { rows, skipped, errors } = parseHardwareExcel(buffer);
       const result = await importHardware(order.products, rows, errors);
+      await syncOrderStatus(orderId);
       return NextResponse.json({
         ok: true,
         created: result.created,
@@ -198,6 +202,7 @@ export async function POST(request: Request) {
 
     const { rows, skipped, errors } = parsePartsExcel(buffer);
     const result = await importParts(order.products, rows, errors);
+    await syncOrderStatus(orderId);
 
     return NextResponse.json({
       ok: true,

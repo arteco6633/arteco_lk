@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireSessionFromDb } from "@/lib/session";
-import { saveUpload } from "@/lib/uploads";
+import { saveFile } from "@/lib/uploads";
 import { parsePartsFromPdfPage2 } from "@/lib/pdf-parts";
 
 export async function POST(
@@ -76,13 +76,14 @@ export async function POST(
     }
 
     if (savePdf) {
-      const saved = await saveUpload(file, `documents/${productId}`);
+      const saved = await saveFile(file, `documents/${productId}`);
       await prisma.document.create({
         data: {
           productId,
           type: "PART_DETAIL",
           filename: file.name,
           filepath: saved.filepath,
+          storageProvider: saved.storageProvider,
         },
       });
     }
