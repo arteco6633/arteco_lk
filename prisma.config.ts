@@ -11,6 +11,6 @@ export default defineConfig({
   },
   engine: "classic",
   datasource: {
-    url: process.env.DATABASE_URL ?? "file:./prisma/dev.db",
+    url: process.env.DATABASE_URL ?? "postgresql://localhost:5432/mebel_flow",
   },
 });

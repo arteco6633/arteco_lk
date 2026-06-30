@@ -16,6 +16,8 @@
 
 ## Запуск
 
+Требуется **PostgreSQL** (раньше был SQLite). Скопируйте `.env.example` → `.env` и укажите `DATABASE_URL` (например, [Neon](https://neon.tech) — бесплатно).
+
 ```bash
 cd ~/Projects/mebel-flow
 npm install
@@ -25,6 +27,21 @@ npm run dev
 ```
 
 Откройте [http://localhost:3000](http://localhost:3000)
+
+## Деплой на Vercel
+
+1. Подключите репозиторий `arteco6633/arteco_lk` к Vercel.
+2. Создайте базу **Neon** (PostgreSQL) и скопируйте connection string.
+3. В Vercel → **Settings → Environment Variables**:
+   - `DATABASE_URL` — строка подключения Neon (`?sslmode=require`)
+   - `SESSION_SECRET` — случайная строка (32+ символов)
+4. Redeploy. После первого успешного деплоя выполните seed один раз (локально с тем же `DATABASE_URL`):
+
+```bash
+npm run db:seed
+```
+
+Демо-логин: `manager@mebel.local` / `123456`
 
 ## Демо-пользователи (пароль: `123456`)
 

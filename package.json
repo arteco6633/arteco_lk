@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "predev": "prisma generate",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && prisma migrate deploy && next build",
+    "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "prisma migrate dev",
@@ -14,6 +15,9 @@
     "template:excel": "tsx scripts/generate-template.ts",
     "test:excel": "tsx scripts/test-excel-import.ts",
     "test:pdf": "tsx scripts/test-pdf-parser.ts"
+  },
+  "engines": {
+    "node": ">=20.9.0"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
