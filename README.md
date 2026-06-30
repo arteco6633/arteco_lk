@@ -16,26 +16,35 @@
 
 ## Запуск
 
-Требуется **PostgreSQL** (раньше был SQLite). Скопируйте `.env.example` → `.env` и укажите `DATABASE_URL` (например, [Neon](https://neon.tech) — бесплатно).
+База данных — **Supabase** (PostgreSQL). Настройте `.env` по образцу `.env.example`.
+
+1. [Supabase Dashboard](https://supabase.com/dashboard) → ваш проект → **Settings → Database**
+2. Скопируйте **Connection string** (пароль БД задаётся при создании проекта)
+3. В `.env` укажите:
+   - `NEXT_PUBLIC_SUPABASE_URL` и `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (уже в примере)
+   - `DATABASE_URL` — **Transaction pooler**, порт **6543** (`?pgbouncer=true`)
+   - `DIRECT_URL` — **Session / Direct**, порт **5432** (для миграций)
 
 ```bash
 cd ~/Projects/mebel-flow
 npm install
 npm run db:setup
-npm run template:excel
 npm run dev
 ```
 
-Откройте [http://localhost:3000](http://localhost:3000)
-
 ## Деплой на Vercel
 
-1. Подключите репозиторий `arteco6633/arteco_lk` к Vercel.
-2. Создайте базу **Neon** (PostgreSQL) и скопируйте connection string.
-3. В Vercel → **Settings → Environment Variables**:
-   - `DATABASE_URL` — строка подключения Neon (`?sslmode=require`)
-   - `SESSION_SECRET` — случайная строка (32+ символов)
-4. Redeploy. После первого успешного деплоя выполните seed один раз (локально с тем же `DATABASE_URL`):
+В **Environment Variables** добавьте все переменные из `.env.example`:
+
+| Переменная | Откуда |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → Settings → API |
+| `DATABASE_URL` | Database → Transaction pooler (:6543) |
+| `DIRECT_URL` | Database → Session pooler (:5432) |
+| `SESSION_SECRET` | Случайная строка 32+ символов |
+
+После первого деплоя выполните seed (с тем же `DATABASE_URL` локально):
 
 ```bash
 npm run db:seed
