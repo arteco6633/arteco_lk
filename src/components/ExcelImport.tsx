@@ -1,6 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import {
+  parseHardwareExcel,
+  parsePartsExcel,
+  parseSpecificationExcel,
+} from "@/lib/excel";
 
 type ImportDetail = {
   row: number;
@@ -57,12 +62,44 @@ export function ExcelImport({
     setDetails([]);
     setParseErrors([]);
 
-    const formData = new FormData();
-    formData.append("orderId", orderId);
-    formData.append("type", type);
-    formData.append("file", file);
+    const buffer = await file.arrayBuffer();
+    let payload: Record<string, unknown>;
 
-    const res = await fetch("/api/import/excel", { method: "POST", body: formData });
+    if (type === "specification") {
+      const parsed = parseSpecificationExcel(buffer);
+      payload = {
+        orderId,
+        type,
+        parts: parsed.parts,
+        hardware: parsed.hardware,
+        skipped: parsed.skipped,
+        errors: parsed.errors,
+      };
+    } else if (type === "hardware") {
+      const parsed = parseHardwareExcel(buffer);
+      payload = {
+        orderId,
+        type,
+        rows: parsed.rows,
+        skipped: parsed.skipped,
+        errors: parsed.errors,
+      };
+    } else {
+      const parsed = parsePartsExcel(buffer);
+      payload = {
+        orderId,
+        type,
+        rows: parsed.rows,
+        skipped: parsed.skipped,
+        errors: parsed.errors,
+      };
+    }
+
+    const res = await fetch("/api/import/excel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
     let data: Record<string, unknown> = {};
     try {
@@ -76,7 +113,13 @@ export function ExcelImport({
     setLoading(false);
 
     if (!res.ok) {
-      setMessage(typeof data.error === "string" ? data.error : "Ошибка импорта");
+      const errText =
+        res.status === 413
+          ? "Файл слишком большой для сервера. Попробуйте обновить страницу — импорт должен идти через браузер."
+          : typeof data.error === "string"
+            ? data.error
+            : "Ошибка импорта";
+      setMessage(errText);
       return;
     }
 

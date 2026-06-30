@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireSessionFromDb } from "@/lib/session";
-import { saveFile } from "@/lib/uploads";
 import { parsePartsFromPdfPage2 } from "@/lib/pdf-parts";
+import { readFileBuffer } from "@/lib/storage";
+import { resolveUploadFromForm } from "@/lib/resolve-upload";
 
 export async function POST(
   request: Request,
@@ -16,16 +17,7 @@ export async function POST(
 
     const { id: productId } = await params;
     const formData = await request.formData();
-    const file = formData.get("file");
     const savePdf = formData.get("savePdf") !== "false";
-
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json({ error: "Выберите PDF файл" }, { status: 400 });
-    }
-
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      return NextResponse.json({ error: "Нужен файл PDF" }, { status: 400 });
-    }
 
     const product = await prisma.product.findUnique({
       where: { id: productId },
@@ -35,7 +27,16 @@ export async function POST(
       return NextResponse.json({ error: "Изделие не найдено" }, { status: 404 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const saved = await resolveUploadFromForm(formData, `documents/${productId}`);
+    if (!saved) {
+      return NextResponse.json({ error: "Выберите PDF файл" }, { status: 400 });
+    }
+
+    if (!saved.filename.toLowerCase().endsWith(".pdf")) {
+      return NextResponse.json({ error: "Нужен файл PDF" }, { status: 400 });
+    }
+
+    const buffer = await readFileBuffer(saved.filepath, saved.storageProvider);
     const parsed = await parsePartsFromPdfPage2(buffer);
 
     if (parsed.parts.length === 0) {
@@ -76,12 +77,11 @@ export async function POST(
     }
 
     if (savePdf) {
-      const saved = await saveFile(file, `documents/${productId}`);
       await prisma.document.create({
         data: {
           productId,
           type: "PART_DETAIL",
-          filename: file.name,
+          filename: saved.filename,
           filepath: saved.filepath,
           storageProvider: saved.storageProvider,
         },

@@ -1,219 +1,31 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
 import { requireSessionFromDb } from "@/lib/session";
-import {
-  parseHardwareExcel,
-  parsePartsExcel,
-  parseSpecificationExcel,
-  type ImportedHardwareRow,
-  type ImportedPartRow,
-} from "@/lib/excel";
-import { extractModuleFromName } from "@/lib/module";
-import { findProductForImport } from "@/lib/products";
-import { assignSectionOrder } from "@/lib/specification-groups";
-import { syncOrderStatus } from "@/lib/orders";
-
-type ImportDetail = {
-  row: number;
-  name: string;
-  productNumber: string;
-  status: "created" | "not_found" | "skipped";
-  target?: string;
-  message?: string;
-  kind?: "part" | "hardware";
-};
-
-function productListLabel(
-  products: Array<{ number: string; name: string }>,
-): string {
-  return products.map((p) => `№${p.number} «${p.name}»`).join(", ");
-}
-
-async function importParts(
-  orderProducts: NonNullable<Awaited<ReturnType<typeof loadOrder>>>["products"],
-  rows: ImportedPartRow[],
-  errors: string[],
-) {
-  const details: ImportDetail[] = [];
-  let created = 0;
-  let notFound = 0;
-  const rowsWithOrder = assignSectionOrder(rows);
-
-  for (const row of rowsWithOrder) {
-    const product = findProductForImport(orderProducts, row);
-    if (!product) {
-      notFound++;
-      const message = `Изделие не найдено (№${row.productNumber}${row.productName ? `, «${row.productName}»` : ""}). В заказе: ${productListLabel(orderProducts)}`;
-      errors.push(`Строка ${row.sourceRow} «${row.name}»: ${message}`);
-      details.push({
-        row: row.sourceRow,
-        name: row.name,
-        productNumber: row.productNumber,
-        status: "not_found",
-        message,
-        kind: "part",
-      });
-      continue;
-    }
-    await prisma.part.create({
-      data: {
-        productId: product.id,
-        specNumber: row.specNumber,
-        name: row.name,
-        code: row.code,
-        module: extractModuleFromName(row.name),
-        length: row.length,
-        width: row.width,
-        dimensions: row.dimensions,
-        quantity: row.quantity,
-        material: row.material,
-        sectionOrder: row.sectionOrder,
-        edging: row.edging,
-        groove: row.groove,
-        rectangular: row.rectangular,
-      },
-    });
-    created++;
-    details.push({
-      row: row.sourceRow,
-      name: row.name,
-      productNumber: row.productNumber,
-      status: "created",
-      target: `№${product.number} «${product.name}»`,
-      kind: "part",
-    });
-  }
-
-  return { created, notFound, details };
-}
-
-async function importHardware(
-  orderProducts: NonNullable<Awaited<ReturnType<typeof loadOrder>>>["products"],
-  rows: ImportedHardwareRow[],
-  errors: string[],
-) {
-  const details: ImportDetail[] = [];
-  let created = 0;
-  let notFound = 0;
-
-  for (const row of rows) {
-    const product = findProductForImport(orderProducts, row);
-    if (!product) {
-      notFound++;
-      const message = `Изделие не найдено (№${row.productNumber}${row.productName ? `, «${row.productName}»` : ""}). В заказе: ${productListLabel(orderProducts)}`;
-      errors.push(`Строка ${row.sourceRow} «${row.name}»: ${message}`);
-      details.push({
-        row: row.sourceRow,
-        name: row.name,
-        productNumber: row.productNumber,
-        status: "not_found",
-        message,
-        kind: "hardware",
-      });
-      continue;
-    }
-    await prisma.hardwareItem.create({
-      data: {
-        productId: product.id,
-        specNumber: row.specNumber,
-        code: row.code,
-        name: row.name,
-        quantity: row.quantity,
-        unit: row.unit,
-      },
-    });
-    created++;
-    details.push({
-      row: row.sourceRow,
-      name: row.name,
-      productNumber: row.productNumber,
-      status: "created",
-      target: `№${product.number} «${product.name}»`,
-      kind: "hardware",
-    });
-  }
-
-  return { created, notFound, details };
-}
-
-async function loadOrder(orderId: string) {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { products: { orderBy: { number: "asc" } } },
-  });
-  if (!order) return null;
-  return order;
-}
+import { parseExcelFromFormData, runExcelImport } from "@/lib/excel-import";
 
 export async function POST(request: Request) {
   try {
     await requireSessionFromDb();
-    const formData = await request.formData();
-    const orderId = String(formData.get("orderId") ?? "");
-    const file = formData.get("file");
-    const importType = String(formData.get("type") ?? "specification");
 
-    if (!orderId || !(file instanceof File)) {
-      return NextResponse.json({ error: "Нужны orderId и файл Excel" }, { status: 400 });
+    const contentType = request.headers.get("content-type") ?? "";
+    let payload;
+
+    if (contentType.includes("application/json")) {
+      payload = await request.json();
+    } else {
+      const formData = await request.formData();
+      const parsed = await parseExcelFromFormData(formData);
+      if ("error" in parsed) {
+        return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      }
+      payload = parsed.payload;
     }
 
-    const order = await loadOrder(orderId);
-    if (!order) return NextResponse.json({ error: "Заказ не найден" }, { status: 404 });
-
-    const buffer = await file.arrayBuffer();
-    const availableProducts = productListLabel(order.products);
-
-    if (importType === "specification") {
-      const { parts, hardware, skipped, errors } = parseSpecificationExcel(buffer);
-      const partsResult = await importParts(order.products, parts, errors);
-      const hwResult = await importHardware(order.products, hardware, errors);
-
-      await syncOrderStatus(orderId);
-
-      return NextResponse.json({
-        ok: true,
-        created: partsResult.created + hwResult.created,
-        partsCreated: partsResult.created,
-        hardwareCreated: hwResult.created,
-        total: parts.length + hardware.length,
-        skipped,
-        notFound: partsResult.notFound + hwResult.notFound,
-        errors,
-        details: [...partsResult.details, ...hwResult.details],
-        availableProducts,
-      });
+    const result = await runExcelImport(payload);
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
-    if (importType === "hardware") {
-      const { rows, skipped, errors } = parseHardwareExcel(buffer);
-      const result = await importHardware(order.products, rows, errors);
-      await syncOrderStatus(orderId);
-      return NextResponse.json({
-        ok: true,
-        created: result.created,
-        total: rows.length,
-        skipped,
-        notFound: result.notFound,
-        errors,
-        details: result.details,
-        availableProducts,
-      });
-    }
-
-    const { rows, skipped, errors } = parsePartsExcel(buffer);
-    const result = await importParts(order.products, rows, errors);
-    await syncOrderStatus(orderId);
-
-    return NextResponse.json({
-      ok: true,
-      created: result.created,
-      total: rows.length,
-      skipped,
-      notFound: result.notFound,
-      errors,
-      details: result.details,
-      availableProducts,
-    });
+    return NextResponse.json(result.body);
   } catch (error) {
     console.error("Excel import failed:", error);
     const message =

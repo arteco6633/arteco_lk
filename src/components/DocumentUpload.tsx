@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DOCUMENT_TYPE_LABELS } from "@/lib/constants";
+import { uploadFileDirect } from "@/lib/direct-upload-client";
 import type { DocumentType } from "@prisma/client";
 
 const DOC_TYPES: DocumentType[] = ["ASSEMBLY_DRAWING", "PART_DETAIL", "LABEL"];
@@ -20,29 +21,48 @@ export function DocumentUpload(props: Props) {
       ? `/api/orders/${props.orderId}/documents`
       : `/api/products/${props.productId}/documents`;
 
+  const subdir =
+    props.scope === "order"
+      ? `orders/${props.orderId}`
+      : `documents/${props.productId}`;
+
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setLoading(true);
     setMessage("");
-    const formData = new FormData();
-    formData.append("type", type);
-    formData.append("file", file);
 
-    const res = await fetch(uploadUrl, {
-      method: "POST",
-      body: formData,
-    });
+    try {
+      const direct = await uploadFileDirect(file, subdir);
+      const formData = new FormData();
+      formData.append("type", type);
 
-    setLoading(false);
-    const data = await res.json().catch(() => ({}));
+      if (direct) {
+        formData.append("filename", direct.filename);
+        formData.append("filepath", direct.filepath);
+        formData.append("storageProvider", direct.storageProvider);
+      } else {
+        formData.append("file", file);
+      }
 
-    if (res.ok) {
-      setMessage("Файл загружен");
-      window.location.reload();
-    } else {
-      setMessage(data.error ?? "Ошибка загрузки");
+      const res = await fetch(uploadUrl, { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        setMessage("Файл загружен");
+        window.location.reload();
+      } else {
+        const err =
+          res.status === 413
+            ? "Файл слишком большой. Добавьте SUPABASE_SERVICE_ROLE_KEY на Vercel."
+            : (data.error ?? "Ошибка загрузки");
+        setMessage(err);
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Ошибка загрузки");
+    } finally {
+      setLoading(false);
     }
   }
 

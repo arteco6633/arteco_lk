@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { DocumentType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireSessionFromDb } from "@/lib/session";
-import { saveFile } from "@/lib/storage";
+import { resolveUploadFromForm } from "@/lib/resolve-upload";
 
 const ALLOWED_TYPES = new Set<string>(Object.values(DocumentType));
 
@@ -15,7 +15,6 @@ export async function POST(
     const { id: orderId } = await params;
     const formData = await request.formData();
     const typeRaw = String(formData.get("type") ?? "").trim();
-    const file = formData.get("file");
 
     if (!ALLOWED_TYPES.has(typeRaw)) {
       return NextResponse.json(
@@ -25,8 +24,9 @@ export async function POST(
     }
 
     const type = typeRaw as DocumentType;
+    const saved = await resolveUploadFromForm(formData, `orders/${orderId}`);
 
-    if (!file || !(file instanceof File)) {
+    if (!saved) {
       return NextResponse.json({ error: "Файл не выбран" }, { status: 400 });
     }
 
@@ -35,7 +35,6 @@ export async function POST(
       return NextResponse.json({ error: "Заказ не найден" }, { status: 404 });
     }
 
-    const saved = await saveFile(file, `orders/${orderId}`);
     const document = await prisma.document.create({
       data: {
         orderId,

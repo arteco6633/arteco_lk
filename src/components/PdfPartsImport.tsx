@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { uploadFileDirect } from "@/lib/direct-upload-client";
 
 type ImportDetail = {
   name: string;
@@ -31,30 +32,47 @@ export function PdfPartsImport({
     setDetails([]);
     setPreviewLines([]);
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("savePdf", "true");
+    try {
+      const formData = new FormData();
+      formData.append("savePdf", "true");
 
-    const res = await fetch(`/api/products/${productId}/import-parts-pdf`, {
-      method: "POST",
-      body: formData,
-    });
-    const data = await res.json();
-    setLoading(false);
+      const direct = await uploadFileDirect(file, `documents/${productId}`);
+      if (direct) {
+        formData.append("filename", direct.filename);
+        formData.append("filepath", direct.filepath);
+        formData.append("storageProvider", direct.storageProvider);
+      } else {
+        formData.append("file", file);
+      }
 
-    if (!res.ok) {
-      setMessage(data.error ?? "Ошибка импорта");
-      if (data.previewLines) setPreviewLines(data.previewLines);
-      return;
-    }
+      const res = await fetch(`/api/products/${productId}/import-parts-pdf`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
 
-    setDetails(data.details ?? []);
-    setMessage(
-      `Импортировано ${data.created} деталей из PDF (стр. ${data.pageNumber}, ${data.method === "ocr" ? "OCR" : "текст"}) для изделия №${productNumber} «${productName}»`,
-    );
+      if (!res.ok) {
+        const err =
+          res.status === 413
+            ? "PDF слишком большой. Добавьте SUPABASE_SERVICE_ROLE_KEY на Vercel."
+            : (data.error ?? "Ошибка импорта");
+        setMessage(err);
+        if (data.previewLines) setPreviewLines(data.previewLines);
+        return;
+      }
 
-    if (data.created > 0) {
-      setTimeout(() => window.location.reload(), 2500);
+      setDetails(data.details ?? []);
+      setMessage(
+        `Импортировано ${data.created} деталей из PDF (стр. ${data.pageNumber}, ${data.method === "ocr" ? "OCR" : "текст"}) для изделия №${productNumber} «${productName}»`,
+      );
+
+      if (data.created > 0) {
+        setTimeout(() => window.location.reload(), 2500);
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Ошибка импорта");
+    } finally {
+      setLoading(false);
     }
   }
 
