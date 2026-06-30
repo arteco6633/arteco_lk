@@ -1,0 +1,60 @@
+"use client";
+
+import { useState } from "react";
+import { DOCUMENT_TYPE_LABELS } from "@/lib/constants";
+import type { DocumentType } from "@prisma/client";
+
+const DOC_TYPES: DocumentType[] = ["ASSEMBLY_DRAWING", "PART_DETAIL", "LABEL"];
+
+export function DocumentUpload({ productId }: { productId: string }) {
+  const [type, setType] = useState<DocumentType>("ASSEMBLY_DRAWING");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    setMessage("");
+    const formData = new FormData();
+    formData.append("type", type);
+    formData.append("file", file);
+
+    const res = await fetch(`/api/products/${productId}/documents`, {
+      method: "POST",
+      body: formData,
+    });
+
+    setLoading(false);
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok) {
+      setMessage("Файл загружен");
+      window.location.reload();
+    } else {
+      setMessage(data.error ?? "Ошибка загрузки");
+    }
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+      <select
+        value={type}
+        onChange={(e) => setType(e.target.value as DocumentType)}
+        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-black"
+      >
+        {DOC_TYPES.map((t) => (
+          <option key={t} value={t}>
+            {DOCUMENT_TYPE_LABELS[t]}
+          </option>
+        ))}
+      </select>
+      <label className="cursor-pointer rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium">
+        {loading ? "Загрузка..." : "Загрузить PDF"}
+        <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleUpload} />
+      </label>
+      {message && <span className="text-sm font-medium text-red-700">{message}</span>}
+    </div>
+  );
+}

@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  CONTRACTOR
+  SORTER
+  DRILLER
+  QC
+  PACKER
+}
+
+enum PartStatus {
+  CREATED
+  RECEIVED
+  SORTED
+  DRILLED
+  QC_PASSED
+  QC_FAILED
+  PACKED
+}
+
+enum DocumentType {
+  ASSEMBLY_DRAWING
+  PART_DETAIL
+  LABEL
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+}
+
+model Order {
+  id        String    @id @default(cuid())
+  number    String    @unique
+  title     String?
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
+model Product {
+  id       String         @id @default(cuid())
+  orderId  String
+  order    Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  number   String
+  name     String
+  parts    Part[]
+  documents Document[]
+  hardware HardwareItem[]
+
+  @@unique([orderId, number])
+}
+
+model Part {
+  id             String      @id @default(cuid())
+  productId      String
+  product        Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  specNumber     Int?
+  name           String
+  code           String?
+  module         String?
+  length         String?
+  width          String?
+  dimensions     String?
+  quantity       Int         @default(1)
+  material       String?
+  sectionOrder   Int?
+  edging         String?
+  groove         String?
+  rectangular    String?
+  status         PartStatus  @default(CREATED)
+  drillPhotoPath String?
+  qcComment      String?
+  receivedAt     DateTime?
+  sortedAt       DateTime?
+  drilledAt      DateTime?
+  qcAt           DateTime?
+  packedAt       DateTime?
+  history        PartHistory[]
+}
+
+model HardwareItem {
+  id         String  @id @default(cuid())
+  productId  String
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  specNumber Int?
+  code       String?
+  name       String
+  quantity   Int     @default(1)
+  unit       String?
+  purchased  Boolean   @default(false)
+  purchasedAt DateTime?
+  packed     Boolean @default(false)
+}
+
+model Document {
+  id         String       @id @default(cuid())
+  productId  String
+  product    Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type       DocumentType
+  filename   String
+  filepath   String
+  uploadedAt DateTime     @default(now())
+}
+
+model PartHistory {
+  id         String      @id @default(cuid())
+  partId     String
+  part       Part        @relation(fields: [partId], references: [id], onDelete: Cascade)
+  userId     String
+  userName   String
+  action     String
+  fromStatus PartStatus?
+  toStatus   PartStatus?
+  comment    String?
+  createdAt  DateTime    @default(now())
+}
