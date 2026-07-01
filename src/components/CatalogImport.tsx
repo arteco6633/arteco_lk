@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { uploadFileDirect } from "@/lib/direct-upload-client";
 
@@ -14,15 +14,38 @@ type ImportResult = {
   sheets?: Array<{ name: string; type: string; count: number }>;
 };
 
+const EXCEL_ACCEPT =
+  ".xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel";
+
 export function CatalogImport() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [mode, setMode] = useState<"merge" | "replace">("merge");
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);
 
+  function pickFileFromList(files: FileList | null | undefined) {
+    const file = files?.[0];
+    if (!file) return;
+    void handleFile(file);
+  }
+
+  function onDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    if (loading) return;
+    pickFileFromList(e.dataTransfer.files);
+  }
+
   async function handleFile(file: File) {
+    if (!/\.(xlsx|xls|xlsm)$/i.test(file.name)) {
+      setMessage("Нужен файл Excel (.xlsx, .xls, .xlsm)");
+      setResult(null);
+      return;
+    }
+
     setLoading(true);
     setMessage("");
     setResult(null);
@@ -30,21 +53,36 @@ export function CatalogImport() {
     const formData = new FormData();
     formData.append("mode", mode);
 
-    const direct = await uploadFileDirect(file, "catalog-imports");
-    if (direct) {
-      formData.append("filepath", direct.filepath);
-      formData.append("filename", direct.filename);
-      formData.append("storageProvider", direct.storageProvider);
-    } else {
-      formData.append("file", file);
-    }
-
     try {
+      // Небольшие Excel — напрямую на сервер (быстрее). Крупные — через Storage.
+      const useDirectStorage = file.size > 4 * 1024 * 1024;
+      let direct = null;
+
+      if (useDirectStorage) {
+        try {
+          direct = await uploadFileDirect(file, "catalog-imports");
+        } catch {
+          // fallback — отправим файл напрямую на API
+        }
+      }
+
+      if (direct) {
+        formData.append("filepath", direct.filepath);
+        formData.append("filename", direct.filename);
+        formData.append("storageProvider", direct.storageProvider);
+      } else {
+        formData.append("file", file);
+      }
+
       const res = await fetch("/api/catalog/import", { method: "POST", body: formData });
       const data = (await res.json()) as ImportResult & { error?: string };
 
       if (!res.ok) {
-        setMessage(data.error ?? "Ошибка импорта");
+        setMessage(
+          res.status === 413
+            ? "Файл слишком большой. Обновите страницу — загрузка должна идти через Storage."
+            : (data.error ?? "Ошибка импорта"),
+        );
         return;
       }
 
@@ -54,8 +92,8 @@ export function CatalogImport() {
           (data.skipped ? `, пропущено строк: ${data.skipped}` : ""),
       );
       router.refresh();
-    } catch {
-      setMessage("Не удалось загрузить файл");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Не удалось загрузить файл");
     } finally {
       setLoading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -93,19 +131,50 @@ export function CatalogImport() {
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xlsx,.xls,.xlsm"
-          disabled={loading}
-          className="text-sm font-medium text-black file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-bold file:text-white"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void handleFile(file);
-          }}
-        />
-        {loading && <span className="text-sm font-medium text-slate-600">Импорт…</span>}
+      {/* Прозрачный input поверх кнопки — надёжно открывает Finder в Safari */}
+      <div
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+        }}
+        onDrop={onDrop}
+        className={`rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
+          dragOver
+            ? "border-indigo-500 bg-indigo-50"
+            : "border-slate-300 bg-slate-50 hover:border-slate-400"
+        }`}
+      >
+        <p className="text-sm font-medium text-slate-600 mb-3">
+          Перетащите Excel сюда или нажмите кнопку
+        </p>
+        <label
+          className={`relative inline-flex rounded-xl bg-slate-900 text-white text-sm font-bold shadow-sm ${
+            loading ? "opacity-70 cursor-wait" : "hover:bg-slate-800 cursor-pointer"
+          }`}
+        >
+          <span className="px-5 py-3 pointer-events-none select-none">
+            {loading ? "Импорт… подождите" : "Выбрать файл Excel"}
+          </span>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={EXCEL_ACCEPT}
+            disabled={loading}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-wait"
+            onChange={(e) => pickFileFromList(e.target.files)}
+          />
+        </label>
+        <p className="text-xs font-medium text-slate-500 mt-2">
+          .xlsx, .xls, .xlsm · большой прайс может грузиться 30–60 сек
+        </p>
       </div>
 
       {message && (

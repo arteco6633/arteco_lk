@@ -8,9 +8,10 @@ import {
 } from "@/lib/constants";
 import {
   formatCatalogDimension,
-  formatCatalogPrice,
   primaryPriceLabel,
 } from "@/lib/catalog-format";
+import { CatalogBulkMarkup } from "@/components/CatalogBulkMarkup";
+import { CatalogEditablePrice } from "@/components/CatalogEditablePrice";
 import type { CatalogCategory, CatalogItem, CatalogItemType } from "@prisma/client";
 
 type ItemWithCategory = CatalogItem & {
@@ -28,6 +29,7 @@ export function CatalogBrowser({
   currentCategoryId,
   currentType,
   query,
+  filteredTotal,
 }: {
   items: ItemWithCategory[];
   categories: CategoryWithCount[];
@@ -37,6 +39,7 @@ export function CatalogBrowser({
   currentCategoryId?: string;
   currentType?: CatalogItemType;
   query?: string;
+  filteredTotal: number;
 }) {
   const router = useRouter();
 
@@ -125,12 +128,22 @@ export function CatalogBrowser({
         </div>
       )}
 
+      <CatalogBulkMarkup
+        categoryId={currentCategoryId}
+        type={currentType}
+        query={query}
+        filteredTotal={filteredTotal}
+      />
+
       {items.length === 0 ? (
         <div className="rounded-2xl bg-white border border-slate-200 p-8 text-center font-medium text-black">
           Позиций не найдено. Загрузите прайс-лист Excel через импорт выше.
         </div>
       ) : (
         <div className="rounded-2xl bg-white border border-slate-200 overflow-x-auto">
+          <p className="px-4 py-2 text-xs font-medium text-slate-500 border-b border-slate-100">
+            Нажмите на цену в таблице, чтобы изменить вручную
+          </p>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-left">
@@ -150,6 +163,7 @@ export function CatalogBrowser({
                   item.heightM && item.widthM
                     ? `${formatCatalogDimension(item.heightM)} × ${formatCatalogDimension(item.widthM)} м`
                     : "—";
+                const refresh = () => router.refresh();
 
                 return (
                   <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
@@ -171,21 +185,40 @@ export function CatalogBrowser({
                         </div>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-black" title={labels.plate}>
-                      {formatCatalogPrice(item.platePrice)}
+                    <td className="px-4 py-3 text-right" title={labels.plate}>
+                      <CatalogEditablePrice
+                        itemId={item.id}
+                        field="platePrice"
+                        value={item.platePrice}
+                        label={labels.plate}
+                        onSaved={refresh}
+                      />
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-black" title={labels.cost}>
-                      {formatCatalogPrice(item.costPrice)}
+                    <td className="px-4 py-3 text-right" title={labels.cost}>
+                      <CatalogEditablePrice
+                        itemId={item.id}
+                        field="costPrice"
+                        value={item.costPrice}
+                        label={labels.cost}
+                        onSaved={refresh}
+                      />
                       {item.costPrice && item.unit !== "SHEET" ? (
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-slate-500 text-right">
                           {CATALOG_UNIT_LABELS[item.unit]}
                         </div>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-black" title={labels.client}>
-                      {formatCatalogPrice(item.clientPrice)}
+                    <td className="px-4 py-3 text-right" title={labels.client}>
+                      <CatalogEditablePrice
+                        itemId={item.id}
+                        field="clientPrice"
+                        value={item.clientPrice}
+                        label={labels.client}
+                        bold
+                        onSaved={refresh}
+                      />
                       {item.clientPrice && item.unit !== "SHEET" ? (
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-slate-500 text-right">
                           {CATALOG_UNIT_LABELS[item.unit]}
                         </div>
                       ) : null}

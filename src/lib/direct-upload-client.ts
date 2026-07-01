@@ -1,5 +1,6 @@
 "use client";
 
+import { createClient } from "@supabase/supabase-js";
 import type { StorageProvider } from "@prisma/client";
 
 export type DirectUploadResult = {
@@ -7,6 +8,15 @@ export type DirectUploadResult = {
   filepath: string;
   storageProvider: StorageProvider;
 };
+
+const DOCUMENTS_BUCKET = "documents";
+
+function createBrowserSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
 
 /** Загрузка через Supabase signed URL — обходит лимит 4.5 MB Vercel */
 export async function uploadFileDirect(
@@ -30,21 +40,31 @@ export async function uploadFileDirect(
     throw new Error(signData.error ?? "Не удалось подготовить загрузку");
   }
 
-  const putRes = await fetch(signData.signedUrl, {
-    method: "PUT",
-    body: file,
-    headers: {
-      "Content-Type": signData.contentType || file.type || "application/octet-stream",
-    },
-  });
+  const supabase = createBrowserSupabase();
+  const token = String(signData.token ?? "");
+  const filepath = String(signData.filepath ?? "");
 
-  if (!putRes.ok) {
-    throw new Error(`Ошибка загрузки в Storage (${putRes.status})`);
+  if (!supabase || !token || !filepath) {
+    throw new Error("Storage не настроен для прямой загрузки");
+  }
+
+  const contentType = signData.contentType || file.type || "application/octet-stream";
+
+  const { error } = await supabase.storage
+    .from(DOCUMENTS_BUCKET)
+    .uploadToSignedUrl(filepath, token, file, {
+      contentType,
+      cacheControl: "3600",
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(error.message);
   }
 
   return {
     filename: file.name,
-    filepath: signData.filepath,
+    filepath,
     storageProvider: "SUPABASE",
   };
 }

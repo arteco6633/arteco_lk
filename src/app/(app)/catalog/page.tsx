@@ -82,6 +82,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
         items={items}
         categories={categories}
         total={totalAll}
+        filteredTotal={total}
         page={page}
         pages={pages}
         currentCategoryId={categoryId}

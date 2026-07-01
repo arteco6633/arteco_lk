@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const supabase = createSupabaseAdmin();
     const { data, error } = await supabase.storage
       .from(DOCUMENTS_BUCKET)
-      .createSignedUploadUrl(filepath);
+      .createSignedUploadUrl(filepath, { upsert: true });
 
     if (error || !data) {
       return NextResponse.json(
